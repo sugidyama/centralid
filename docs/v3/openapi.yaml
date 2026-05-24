@@ -1,0 +1,510 @@
+openapi: 3.1.0
+info:
+  title: セントラルID API
+  version: "2"
+  description: セントラルID 認証・ユーザー管理 API
+
+servers:
+  - url: https://centralid.win
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    User:
+      type: object
+      properties:
+        central_id:
+          type: string
+          example: "2026-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        public_id:
+          type: integer
+          example: 1001
+        user_name:
+          type: [string, "null"]
+          example: null
+        display_name:
+          type: [string, "null"]
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-24T00:00:00Z"
+
+    TokenResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            expires_in:
+              type: integer
+              description: アクセストークン有効期間（秒）
+              example: 900
+            is_new_user:
+              type: boolean
+            user:
+              $ref: "#/components/schemas/User"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: エラーの説明
+
+paths:
+  /auth/mail:
+    post:
+      summary: OTP発行・送信
+      description: 指定メールアドレスに6桁のワンタイムコードを発行して送信する。同一メールの未使用コードがある場合は無効化してから新規発行する。
+      tags:
+        - メールOTP認証
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                service_id:
+                  type: string
+                  description: 呼び出し元サービスID（services.id）。user_eventsの記録に使用する。
+                  example: lunchmap
+      responses:
+        "204":
+          description: 発行・送信成功
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                VALIDATION_ERROR:
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: メールアドレス形式不正
+                INVALID_SERVICE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_SERVICE
+                      message: 存在しないサービスID
+
+    put:
+      summary: OTP再送信
+      description: 既存の未使用コードを無効化し、新規コードを発行して再送信する。前回の再送信から60秒以内は拒否される。
+      tags:
+        - メールOTP認証
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                service_id:
+                  type: string
+                  example: lunchmap
+      responses:
+        "204":
+          description: 再送信成功
+        "400":
+          description: リクエストエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                RESEND_TOO_SOON:
+                  value:
+                    success: false
+                    error:
+                      code: RESEND_TOO_SOON
+                      message: 前回再送信から60秒未満
+                INVALID_SERVICE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_SERVICE
+                      message: 存在しないサービスID
+
+  /auth/mail/login:
+    post:
+      summary: OTP検証・ログイン
+      description: コードを照合し、一致した場合はアクセストークンとリフレッシュトークンを発行する。メールアドレスに紐づくアカウントが存在しない場合は新規登録する。
+      tags:
+        - メールOTP認証
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - code
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                code:
+                  type: string
+                  description: 6桁数字コード
+                  pattern: "^[0-9]{6}$"
+                  example: "123456"
+                service_id:
+                  type: string
+                  example: lunchmap
+      responses:
+        "200":
+          description: 検証成功・トークン発行
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                INVALID_CODE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_CODE
+                      message: コード不一致または未発行
+                CODE_EXPIRED:
+                  value:
+                    success: false
+                    error:
+                      code: CODE_EXPIRED
+                      message: コード期限切れ
+                MAX_ATTEMPTS_EXCEEDED:
+                  value:
+                    success: false
+                    error:
+                      code: MAX_ATTEMPTS_EXCEEDED
+                      message: 試行回数が5回以上
+
+  /oauth/{identity}:
+    get:
+      summary: OAuth認証画面へリダイレクト
+      description: CSRF防止用のステートをone_time_statesに保存し、各プロバイダーの認可URLへリダイレクトする。
+      tags:
+        - OAuth認証
+      parameters:
+        - name: identity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+          description: OAuthプロバイダー
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: 認証完了後のリダイレクト先URI
+        - name: service_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 呼び出し元サービスID
+      responses:
+        "302":
+          description: プロバイダーの認可URLへリダイレクト
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        "400":
+          description: リクエストエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                INVALID_SERVICE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_SERVICE
+                      message: 存在しないサービスID
+
+  /oauth/{identity}/callback:
+    get:
+      summary: OAuthコールバック受付
+      description: プロバイダーからのコールバックを受け付ける。ステートを照合し、成功した場合はone_time_codesに一時コードを発行してredirect_uriへリダイレクトする。アカウントが存在しない場合は新規登録する。
+      tags:
+        - OAuth認証
+      parameters:
+        - name: identity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: プロバイダーが発行した認可コード
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRF防止用ステート
+      responses:
+        "302":
+          description: "{redirect_uri}?auth_code={code} へリダイレクト"
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        "400":
+          description: ステートエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                INVALID_STATE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_STATE
+                      message: ステート不一致・期限切れ
+        "500":
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                INTERNAL_SERVER_ERROR:
+                  value:
+                    success: false
+                    error:
+                      code: INTERNAL_SERVER_ERROR
+                      message: プロバイダー通信失敗
+
+  /oauth/{identity}/login:
+    post:
+      summary: 一時コードによるログイン
+      description: callbackで発行された一時コードをアクセストークンに交換する。コードは一度使用したら無効になる。
+      tags:
+        - OAuth認証
+      parameters:
+        - name: identity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - auth_code
+              properties:
+                auth_code:
+                  type: string
+                  description: コールバックで取得した一時コード
+                  example: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      responses:
+        "200":
+          description: トークン発行成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: コードエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                INVALID_CODE:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_CODE
+                      message: 一時コード不一致・使用済み
+                CODE_EXPIRED:
+                  value:
+                    success: false
+                    error:
+                      code: CODE_EXPIRED
+                      message: 一時コード期限切れ
+
+  /auth/token:
+    get:
+      summary: トークン検証・ユーザー情報取得
+      description: アクセストークンを検証し、有効な場合はログインユーザーの情報を返す。
+      tags:
+        - トークン管理
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: トークン有効・ユーザー情報返却
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                UNAUTHORIZED:
+                  value:
+                    success: false
+                    error:
+                      code: UNAUTHORIZED
+                      message: トークン未提供・無効
+                TOKEN_EXPIRED:
+                  value:
+                    success: false
+                    error:
+                      code: TOKEN_EXPIRED
+                      message: アクセストークン期限切れ
+
+    patch:
+      summary: アクセストークン更新
+      description: 有効なリフレッシュトークンを受け取り、新しいアクセストークンとリフレッシュトークンを発行する（トークンローテーション）。旧トークンは即時失効する。
+      tags:
+        - トークン管理
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: 現在のリフレッシュトークン
+      responses:
+        "200":
+          description: トークン更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      access_token:
+                        type: string
+                      refresh_token:
+                        type: string
+                      expires_in:
+                        type: integer
+                        example: 900
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                UNAUTHORIZED:
+                  value:
+                    success: false
+                    error:
+                      code: UNAUTHORIZED
+                      message: リフレッシュトークン無効・失効済み
+                TOKEN_EXPIRED:
+                  value:
+                    success: false
+                    error:
+                      code: TOKEN_EXPIRED
+                      message: リフレッシュトークン期限切れ
+
+    delete:
+      summary: ログアウト
+      description: アクセストークンを失効させる（revoked_atを設定）。user_eventsにlogoutイベントを記録する。
+      tags:
+        - トークン管理
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: ログアウト成功
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                UNAUTHORIZED:
+                  value:
+                    success: false
+                    error:
+                      code: UNAUTHORIZED
+                      message: トークン未提供・無効
