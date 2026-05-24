@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 class TokenService
 {
     /** アクセストークン有効期限（分） */
-    private const ACCESS_EXPIRES_MINUTES = 15;
+    private const ACCESS_EXPIRES_MINUTES = 60;
 
     /** リフレッシュトークン有効期限（日） */
     private const REFRESH_EXPIRES_DAYS = 30;
