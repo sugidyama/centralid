@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "api": "npx @redocly/cli build-docs ./docs/v2/openapi.yaml -o ./docs/v2/index.html",
+    "laravel_init": "composer create-project laravel/laravel .",
+    "db": "npx dbml2sql ./docs/database.dbml --mysql -o ./docs/database.sql"
+  },
+  "dependencies": {
+    "@dbml/cli": "^7.1.1",
+    "redoc-cli": "^0.13.21"
+  }
+}
