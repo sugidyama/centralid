@@ -75,7 +75,7 @@ class OAuthController extends Controller
             throw $e;
         }
 
-        return Socialite::driver($identity)->redirect();
+        return Socialite::driver($identity)->stateless()->with(['state' => $state])->redirect();
     }
 
     /**
@@ -93,7 +93,7 @@ class OAuthController extends Controller
 
         try
         {
-            $oauthUser = Socialite::driver($identity)->user();
+            $oauthUser = Socialite::driver($identity)->stateless()->user();
         }
         catch (\Laravel\Socialite\Two\InvalidStateException $e)
         {
