@@ -41,7 +41,6 @@ echo "➔ Running post-deployment optimization tasks..."
 cd ./backend
 php artisan config:cache
 php artisan route:cache
-php artisan view:cache
 
 echo "=================================================="
 echo " 🎉 Deployment Successfully Completed!"
