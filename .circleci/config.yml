@@ -6,10 +6,10 @@ jobs:
       - image: cimg/base:stable
     steps:
       - checkout
-      # SSH秘密鍵を読み込み、SSHエージェントに追加（CircleCIのプロジェクト設定でSSHキーを登録）
+      # SSH秘密鍵を読み込み、SSHエージェントに追加（CircleCIのProjectSettings->SSH KeysでSSHキーを登録）
       - add_ssh_keys:
           fingerprints:
-            - "後で設定"
+            - "SHA256:nnNqEURJazE0vFFj5tlmvPYLRdJKlq9qmcIeSqhGb2Q"
 
       # VPSのホストキーを追加
       - run:
@@ -17,7 +17,7 @@ jobs:
           command: |
             ssh-keyscan -H ${VPS_IP} >> ~/.ssh/known_hosts
 
-      # VPSにSSH接続する（自動的にリポジトリ内の deploy.sh が実行される）
+      # VPSにSSH接続してスクリプト実行（CircleCIのProjectSettings->Environment VariablesでVPS_USERとVPS_IPを登録）
       - run:
           name: Execute Deploy Script via SSH
           command: |
