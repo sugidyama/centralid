@@ -42,6 +42,10 @@ cd ./backend
 php artisan config:cache
 php artisan route:cache
 
+# 5. OPcache クリア（PHP-FPM 再起動）
+echo "➔ Restarting PHP-FPM to clear OPcache..."
+sudo systemctl restart php-fpm
+
 echo "=================================================="
 echo " 🎉 Deployment Successfully Completed!"
 echo "=================================================="

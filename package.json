@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "api": "npx @redocly/cli build-docs ./docs/v2/openapi.yaml -o ./docs/v2/index.html",
+    "api": "npx @redocly/cli build-docs ./docs/v3/openapi.yaml -o ./backend/public/apidoc/index.html",
     "laravel_init": "composer create-project laravel/laravel .",
     "db": "npx dbml2sql ./docs/database.dbml --mysql -o ./docs/database.sql"
   },
