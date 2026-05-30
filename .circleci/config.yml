@@ -1,0 +1,33 @@
+version: 2.1
+
+jobs:
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      # SSH秘密鍵を読み込み、SSHエージェントに追加（CircleCIのプロジェクト設定でSSHキーを登録）
+      - add_ssh_keys:
+          fingerprints:
+            - "後で設定"
+
+      # VPSのホストキーを追加
+      - run:
+          name: Add VPS to known_hosts
+          command: |
+            ssh-keyscan -H ${VPS_IP} >> ~/.ssh/known_hosts
+
+      # VPSにSSH接続する（自動的にリポジトリ内の deploy.sh が実行される）
+      - run:
+          name: Execute Deploy Script via SSH
+          command: |
+            ssh ${VPS_USER}@${VPS_IP} "run"
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - deploy:
+          filters:
+            branches:
+              only: main # mainブランチにマージ/プッシュした時に起動
